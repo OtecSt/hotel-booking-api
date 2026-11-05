@@ -1,0 +1,24 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: api-gateway
+  cloud:
+    gateway:
+      server:
+        webflux:
+          routes:
+            - id: hotel
+              uri: lb://hotel-service
+              predicates:
+                - Path=/api/hotels,/api/hotels/**,/api/rooms,/api/rooms/recommend,/api/rooms/{roomId}
+            - id: booking
+              uri: lb://booking-service
+              predicates:
+                - Path=/api/bookings,/api/bookings/**,/api/users,/api/users/**,/api/auth/**
+
+eureka:
+  client:
+    service-url:
+      defaultZone: "${EUREKA_URL:http://localhost:8761/eureka/}"
