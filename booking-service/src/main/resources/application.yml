@@ -4,6 +4,13 @@ server:
 spring:
   application:
     name: booking-service
+  mvc:
+    problemdetails:
+      enabled: true
+  cloud:
+    loadbalancer:
+      cache:
+        enabled: false
   datasource:
     url: jdbc:h2:mem:booking
   jpa:
@@ -11,5 +18,9 @@ spring:
 
 eureka:
   client:
+    registry-fetch-interval-seconds: 5
     service-url:
       defaultZone: "${EUREKA_URL:http://localhost:8761/eureka/}"
+
+app:
+  jwt-secret: "${HOTEL_BOOKING_JWT_SECRET}"

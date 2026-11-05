@@ -4,6 +4,9 @@ server:
 spring:
   application:
     name: hotel-service
+  mvc:
+    problemdetails:
+      enabled: true
   datasource:
     url: jdbc:h2:mem:hotel
   jpa:
@@ -13,3 +16,6 @@ eureka:
   client:
     service-url:
       defaultZone: "${EUREKA_URL:http://localhost:8761/eureka/}"
+
+app:
+  jwt-secret: "${HOTEL_BOOKING_JWT_SECRET}"
