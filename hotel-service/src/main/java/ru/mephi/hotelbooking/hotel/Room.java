@@ -1,5 +1,6 @@
 package ru.mephi.hotelbooking.hotel;
 
+import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
@@ -20,6 +21,7 @@ class Room {
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     Hotel hotel;
 
+    @Column(nullable = false, length = 30)
     String number;
     boolean available = true;
     int timesBooked;

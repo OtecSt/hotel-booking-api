@@ -24,3 +24,7 @@ eureka:
 
 app:
   jwt-secret: "${HOTEL_BOOKING_JWT_SECRET}"
+
+logging:
+  pattern:
+    level: "%5p traceId=%X{traceId:-}"

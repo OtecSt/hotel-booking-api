@@ -1,9 +1,12 @@
 package ru.mephi.hotelbooking.booking;
 
+import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 import org.springframework.http.HttpStatus;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
@@ -36,18 +39,48 @@ class BookingWorkflow {
             return booking;
         }
 
+        if (roomId == 0) {
+            return chooseRoom(booking);
+        }
+        reserve(booking, false);
+        return store.confirm(booking.id);
+    }
+
+    private Booking chooseRoom(Booking booking) {
+        List<Long> candidates;
+        try {
+            candidates = hotel.recommend(booking);
+        } catch (RestClientException | IllegalStateException | CallNotPermittedException failure) {
+            store.cancel(booking.id, booking.userId, true, false);
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Could not retrieve free rooms", failure);
+        }
+
+        for (long candidate : candidates) {
+            Booking selected = store.selectRoom(booking.id, candidate);
+            if (reserve(selected, true)) {
+                return store.confirm(booking.id);
+            }
+        }
+        store.cancel(booking.id, booking.userId, true, false);
+        throw new ResponseStatusException(HttpStatus.CONFLICT, "No room is available for the requested dates");
+    }
+
+    private boolean reserve(Booking booking, boolean autoSelect) {
         try {
             hotel.reserve(booking);
+            return true;
         } catch (RestClientResponseException failure) {
             if (failure.getStatusCode().value() == 409 || failure.getStatusCode().value() == 404) {
-                store.cancel(booking.id, userId, true, false);
+                if (autoSelect) {
+                    return false;
+                }
+                store.cancel(booking.id, booking.userId, true, false);
                 throw new ResponseStatusException(failure.getStatusCode(), "Hotel could not reserve the room");
             }
             throw unavailable(booking, failure);
-        } catch (RestClientException | IllegalStateException failure) {
+        } catch (RestClientException | IllegalStateException | CallNotPermittedException failure) {
             throw unavailable(booking, failure);
         }
-        return store.confirm(booking.id);
     }
 
     void cancel(UUID id, UUID userId) {
@@ -65,12 +98,22 @@ class BookingWorkflow {
 
     @Scheduled(fixedDelayString = "${app.release-retry-delay:PT15S}")
     public void retryReleases() {
-        bookings.findFirst50ByReleasePendingTrueOrderByCreatedAtAsc().forEach(this::release);
+        for (Booking booking : bookings.findFirst50ByReleasePendingTrueOrderByCreatedAtAsc()) {
+            String traceId = booking.releaseTraceId == null ? booking.id.toString() : booking.releaseTraceId;
+            try (var context = MDC.putCloseable("traceId", traceId)) {
+                release(booking);
+            }
+        }
     }
 
     private boolean release(Booking booking) {
         try {
             hotel.release(booking);
+        } catch (RestClientResponseException failure) {
+            if (failure.getStatusCode().value() != 404) {
+                log.warn("booking_release_pending bookingId={} cause={}", booking.id, failure.toString());
+                return false;
+            }
         } catch (RestClientException | IllegalStateException failure) {
             log.warn("booking_release_pending bookingId={} cause={}", booking.id, failure.toString());
             return false;

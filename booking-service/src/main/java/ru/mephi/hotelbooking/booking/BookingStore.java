@@ -4,6 +4,7 @@ import java.time.LocalDate;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -28,7 +29,7 @@ class BookingStore {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Unknown user"));
         Booking existing = bookings.findByUserIdAndRequestId(userId, requestId).orElse(null);
         if (existing != null) {
-            if (existing.roomId != roomId || !startDate.equals(existing.startDate) || !endDate.equals(existing.endDate)) {
+            if (existing.requestedRoomId != roomId || !startDate.equals(existing.startDate) || !endDate.equals(existing.endDate)) {
                 throw new ResponseStatusException(HttpStatus.CONFLICT, "Idempotency key already used for different dates or room");
             }
             return new Creation(existing, false);
@@ -36,6 +37,14 @@ class BookingStore {
         Booking booking = bookings.save(new Booking(userId, requestId, roomId, startDate, endDate));
         log.info("booking_pending bookingId={} roomId={}", booking.id, roomId);
         return new Creation(booking, true);
+    }
+
+    @Transactional
+    public Booking selectRoom(UUID id, long roomId) {
+        Booking booking = lock(id);
+        booking.roomId = roomId;
+        log.info("booking_room_selected bookingId={} roomId={}", id, roomId);
+        return booking;
     }
 
     @Transactional
@@ -60,6 +69,7 @@ class BookingStore {
         if (booking.status != Booking.Status.CANCELLED) {
             booking.status = Booking.Status.CANCELLED;
             booking.releasePending = releaseRequired;
+            booking.releaseTraceId = MDC.get("traceId");
             log.info("booking_cancelled bookingId={} releasePending={}", id, releaseRequired);
         }
         return booking;

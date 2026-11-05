@@ -32,10 +32,10 @@ class RoomInventory {
     }
 
     @Transactional(readOnly = true)
-    public List<RoomView> available(LocalDate startDate, LocalDate endDate, boolean recommend) {
+    public List<RoomView> available(LocalDate startDate, LocalDate endDate, Long hotelId, boolean recommend) {
         validateDates(startDate, endDate);
-        var candidates = rooms.findAvailable(startDate, endDate).stream()
-                .map(room -> new RoomView(room.id, room.hotel.id, room.number, room.timesBooked));
+        var candidates = rooms.findAvailable(startDate, endDate, hotelId).stream()
+                .map(room -> RoomView.from(room));
         if (recommend) {
             candidates = candidates.sorted(Comparator.comparingInt(RoomView::timesBooked).thenComparingLong(RoomView::id));
         }
@@ -84,7 +84,7 @@ class RoomInventory {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Room not found"));
     }
 
-    private void validateDates(LocalDate startDate, LocalDate endDate) {
+    static void validateDates(LocalDate startDate, LocalDate endDate) {
         if (!startDate.isBefore(endDate)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "End date must be after start date");
         }
@@ -93,6 +93,10 @@ class RoomInventory {
     record HotelView(long id, String name, String address) {
     }
 
-    record RoomView(long id, long hotelId, String number, int timesBooked) {
+    record RoomView(long id, long hotelId, String number, boolean available, int timesBooked) {
+
+        static RoomView from(Room room) {
+            return new RoomView(room.id, room.hotel.getId(), room.number, room.available, room.timesBooked);
+        }
     }
 }

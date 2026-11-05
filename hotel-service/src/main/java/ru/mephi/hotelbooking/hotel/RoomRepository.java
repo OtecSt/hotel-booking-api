@@ -16,11 +16,16 @@ interface RoomRepository extends JpaRepository<Room, Long> {
 
     @Query("""
             select r from Room r join fetch r.hotel
-            where r.available = true and not exists (
+            where (:hotelId is null or r.hotel.id = :hotelId) and r.available = true and not exists (
                 select s from RoomSlot s where s.roomId = r.id and s.released = false
                     and s.startDate < :endDate and s.endDate > :startDate
             )
             order by r.id
             """)
-    List<Room> findAvailable(LocalDate startDate, LocalDate endDate);
+    List<Room> findAvailable(LocalDate startDate, LocalDate endDate, Long hotelId);
+
+    boolean existsByHotelId(long hotelId);
+
+    @Query("select r from Room r join fetch r.hotel where (:hotelId is null or r.hotel.id = :hotelId) order by r.id")
+    List<Room> findForHotel(Long hotelId);
 }

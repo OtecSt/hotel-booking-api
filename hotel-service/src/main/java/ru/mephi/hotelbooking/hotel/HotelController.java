@@ -1,5 +1,6 @@
 package ru.mephi.hotelbooking.hotel;
 
+import io.swagger.v3.oas.annotations.Hidden;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import java.time.LocalDate;
@@ -29,21 +30,25 @@ class HotelController {
     }
 
     @GetMapping("/api/rooms")
-    List<RoomInventory.RoomView> available(@RequestParam LocalDate startDate, @RequestParam LocalDate endDate) {
-        return inventory.available(startDate, endDate, false);
+    List<RoomInventory.RoomView> available(@RequestParam LocalDate startDate, @RequestParam LocalDate endDate,
+                                           @RequestParam(required = false) Long hotelId) {
+        return inventory.available(startDate, endDate, hotelId, false);
     }
 
     @GetMapping("/api/rooms/recommend")
-    List<RoomInventory.RoomView> recommend(@RequestParam LocalDate startDate, @RequestParam LocalDate endDate) {
-        return inventory.available(startDate, endDate, true);
+    List<RoomInventory.RoomView> recommend(@RequestParam LocalDate startDate, @RequestParam LocalDate endDate,
+                                           @RequestParam(required = false) Long hotelId) {
+        return inventory.available(startDate, endDate, hotelId, true);
     }
 
+    @Hidden
     @PostMapping("/api/rooms/{roomId}/confirm-availability")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     void reserve(@PathVariable long roomId, @Valid @RequestBody ReserveRequest request) {
         inventory.reserve(roomId, request.bookingId(), request.startDate(), request.endDate());
     }
 
+    @Hidden
     @PostMapping("/api/rooms/{roomId}/release")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     void release(@PathVariable long roomId, @Valid @RequestBody ReleaseRequest request) {

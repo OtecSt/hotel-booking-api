@@ -30,11 +30,13 @@ class Booking {
     @Column(nullable = false, length = 100)
     String requestId;
 
+    long requestedRoomId;
     long roomId;
     LocalDate startDate;
     LocalDate endDate;
     Instant createdAt = Instant.now();
     boolean releasePending;
+    String releaseTraceId;
 
     @Enumerated(EnumType.STRING)
     Status status = Status.PENDING;
@@ -45,6 +47,7 @@ class Booking {
     Booking(UUID userId, String requestId, long roomId, LocalDate startDate, LocalDate endDate) {
         this.userId = userId;
         this.requestId = requestId;
+        this.requestedRoomId = roomId;
         this.roomId = roomId;
         this.startDate = startDate;
         this.endDate = endDate;

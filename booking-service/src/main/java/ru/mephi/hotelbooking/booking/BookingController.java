@@ -1,11 +1,11 @@
 package ru.mephi.hotelbooking.booking;
 
 import jakarta.validation.Valid;
+import io.swagger.v3.oas.annotations.Parameter;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
-import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -16,6 +16,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -40,10 +41,17 @@ class BookingController {
     }
 
     @PostMapping
-    ResponseEntity<BookingView> create(@AuthenticationPrincipal Jwt jwt,
+    ResponseEntity<BookingView> create(@Parameter(hidden = true) @AuthenticationPrincipal Jwt jwt,
             @RequestHeader("Idempotency-Key") @NotBlank @Size(max = 100) String requestId,
             @Valid @RequestBody CreateBooking request) {
-        Booking booking = workflow.create(userId(jwt), requestId, request.roomId(), request.startDate(), request.endDate());
+        long roomId = 0;
+        if (!request.autoSelect()) {
+            if (request.roomId() == null || request.roomId() <= 0) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "roomId must be positive for manual booking");
+            }
+            roomId = request.roomId();
+        }
+        Booking booking = workflow.create(userId(jwt), requestId, roomId, request.startDate(), request.endDate());
         HttpStatus status = switch (booking.status) {
             case PENDING -> HttpStatus.ACCEPTED;
             case CONFIRMED -> HttpStatus.CREATED;
@@ -53,7 +61,7 @@ class BookingController {
     }
 
     @GetMapping
-    BookingPage history(@AuthenticationPrincipal Jwt jwt,
+    BookingPage history(@Parameter(hidden = true) @AuthenticationPrincipal Jwt jwt,
             @RequestParam(defaultValue = "0") @Min(0) int page,
             @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size) {
         var result = bookings.findByUserIdOrderByCreatedAtDescIdDesc(userId(jwt), PageRequest.of(page, size));
@@ -61,14 +69,14 @@ class BookingController {
     }
 
     @GetMapping("/{id}")
-    BookingView get(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID id) {
+    BookingView get(@Parameter(hidden = true) @AuthenticationPrincipal Jwt jwt, @PathVariable UUID id) {
         return bookings.findByIdAndUserId(id, userId(jwt)).map(BookingView::from)
                 .orElseThrow(BookingStore::notFound);
     }
 
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    void cancel(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID id) {
+    void cancel(@Parameter(hidden = true) @AuthenticationPrincipal Jwt jwt, @PathVariable UUID id) {
         workflow.cancel(id, userId(jwt));
     }
 
@@ -76,14 +84,14 @@ class BookingController {
         return UUID.fromString(jwt.getSubject());
     }
 
-    record CreateBooking(@Positive long roomId, @NotNull LocalDate startDate, @NotNull LocalDate endDate) {
+    record CreateBooking(Long roomId, @NotNull LocalDate startDate, @NotNull LocalDate endDate, boolean autoSelect) {
     }
 
-    record BookingView(UUID id, long roomId, LocalDate startDate, LocalDate endDate,
+    record BookingView(UUID id, Long roomId, LocalDate startDate, LocalDate endDate,
                        Booking.Status status, Instant createdAt) {
 
         static BookingView from(Booking booking) {
-            return new BookingView(booking.id, booking.roomId, booking.startDate, booking.endDate,
+            return new BookingView(booking.id, booking.roomId == 0 ? null : booking.roomId, booking.startDate, booking.endDate,
                     booking.status, booking.createdAt);
         }
     }

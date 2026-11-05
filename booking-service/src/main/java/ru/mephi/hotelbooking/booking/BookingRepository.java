@@ -12,6 +12,8 @@ import org.springframework.data.jpa.repository.Query;
 
 interface BookingRepository extends JpaRepository<Booking, UUID> {
 
+    boolean existsByUserId(UUID userId);
+
     Optional<Booking> findByUserIdAndRequestId(UUID userId, String requestId);
 
     Optional<Booking> findByIdAndUserId(UUID id, UUID userId);

@@ -6,13 +6,19 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.jwt.JwtEncoder;
 import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
 import jakarta.servlet.DispatcherType;
+import jakarta.servlet.http.HttpServletResponse;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import javax.crypto.SecretKey;
 import javax.crypto.spec.SecretKeySpec;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
@@ -24,6 +30,7 @@ import org.springframework.security.oauth2.server.resource.authentication.JwtGra
 import org.springframework.security.web.SecurityFilterChain;
 
 @Configuration
+@EnableMethodSecurity
 class SecurityConfig {
 
     @Bean
@@ -38,12 +45,30 @@ class SecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                     .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
-                    .requestMatchers("/actuator/health").permitAll()
+                    .requestMatchers("/actuator/health", "/v3/api-docs/**", "/swagger-ui.html", "/swagger-ui/**")
+                        .permitAll()
                     .requestMatchers(HttpMethod.POST, "/api/auth/register", "/api/auth/login").permitAll()
                     .requestMatchers("/api/bookings", "/api/bookings/**").hasRole("USER")
+                    .requestMatchers("/api/users", "/api/users/**").hasRole("ADMIN")
                     .anyRequest().denyAll())
-                .oauth2ResourceServer(oauth -> oauth.jwt(jwt -> jwt.jwtAuthenticationConverter(converter)))
+                .exceptionHandling(errors -> errors
+                        .authenticationEntryPoint((request, response, failure) -> problem(response, HttpStatus.UNAUTHORIZED))
+                        .accessDeniedHandler((request, response, failure) -> problem(response, HttpStatus.FORBIDDEN)))
+                .oauth2ResourceServer(oauth -> oauth
+                        .authenticationEntryPoint((request, response, failure) -> problem(response, HttpStatus.UNAUTHORIZED))
+                        .jwt(jwt -> jwt.jwtAuthenticationConverter(converter)))
                 .build();
+    }
+
+    private void problem(HttpServletResponse response, HttpStatus status) throws IOException {
+        response.setStatus(status.value());
+        response.setContentType(MediaType.APPLICATION_PROBLEM_JSON_VALUE);
+        if (status == HttpStatus.UNAUTHORIZED) {
+            response.setHeader(HttpHeaders.WWW_AUTHENTICATE, "Bearer");
+        }
+        response.getWriter().write("""
+                {"type":"about:blank","title":"%s","status":%d}
+                """.formatted(status.getReasonPhrase(), status.value()));
     }
 
     @Bean
